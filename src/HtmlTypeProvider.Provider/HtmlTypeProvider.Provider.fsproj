@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <OutputPath>..\HtmlTypeProvider\obj\$(Configuration)\typeproviders\fsharp41\netstandard2.0</OutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <DefineConstants>IS_DESIGNTIME</DefineConstants>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ProvidedTypes.fsi" />
+    <Compile Include="ProvidedTypes.fs" />
+    <Compile Include="..\HtmlTypeProvider\NodeTypes.fs" Link="NodeTypes.fs" />
+    <Compile Include="..\HtmlTypeProvider\Attr.fs" Link="Attr.fs" />
+    <Compile Include="..\HtmlTypeProvider\Node.fs" Link="Node.fs" />
+    <Compile Include="..\HtmlTypeProvider\TemplatingInternals.fs" Link="TemplatingInternals.fs" />
+    <Compile Include="Utilities.fs" />
+    <Compile Include="Path.fs" />
+    <Compile Include="Parsing.fs" />
+    <Compile Include="ConvertExpr.fs" />
+    <Compile Include="CodeGen.fs" />
+    <Compile Include="Provider.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.*" />
+  </ItemGroup>
+</Project>
