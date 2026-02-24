@@ -190,6 +190,8 @@ let ParseDoc (optimizeHtml: bool) (filename: option<string>) (doc: HtmlDocument)
             match doc.DocumentNode.SelectNodes("//template") with
             | null -> [||]
             | nodes -> Array.ofSeq nodes
+        // Remove all template nodes from the document before processing,
+        // so nested templates don't appear in their parent's content.
         templateNodes
         |> Seq.iter (fun n -> n.Remove())
         templateNodes
@@ -199,7 +201,6 @@ let ParseDoc (optimizeHtml: bool) (filename: option<string>) (doc: HtmlDocument)
                 failwith "Nested template must have an id"
             | id ->
                 let parsed = ParseOneTemplate optimizeHtml n.ChildNodes
-                n.Remove()
                 (id, parsed)
         )
         |> Map.ofSeq

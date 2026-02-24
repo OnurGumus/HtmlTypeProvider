@@ -20,7 +20,7 @@ let MakeCtor (holes: Parsing.Vars) =
                 | HoleType.String -> <@ box "" @>
                 | HoleType.Html -> <@ box (Node.Empty()) @>
                 | HoleType.Attribute -> <@ box (Attr.Empty()) @>
-                | HoleType.AttributeValue -> <@ null @>
+                | HoleType.AttributeValue -> <@ box "" @>
         ]
         <@@ (%getThis args).Holes <- %holes @@>)
 
@@ -48,6 +48,14 @@ let HoleMethodBodies (holeType: HoleType) : (ProvidedParameter list * (Expr list
         ]
     | HoleType.AttributeValue ->
         [
+            ["value" => typeof<string>], fun args ->
+                <@@ box (%%args[1]: string) @@>
+            ["value" => typeof<int>], fun args ->
+                <@@ box (%%args[1]: int) @@>
+            ["value" => typeof<float>], fun args ->
+                <@@ box (%%args[1]: float) @@>
+            ["value" => typeof<bool>], fun args ->
+                <@@ box (%%args[1]: bool) @@>
             ["value" => typeof<obj>], fun args ->
                 <@@ %%args[1] @@>
         ]

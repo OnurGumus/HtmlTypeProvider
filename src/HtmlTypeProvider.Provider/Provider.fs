@@ -37,8 +37,16 @@ type Template (cfg: TypeProviderConfig) as this =
 
         fileWatcher.Changed.Add(changeHandler)
         fileWatcher.Deleted.Add(changeHandler)
+        fileWatcher.Renamed.Add(fun e -> changeHandler e)
         fileWatcher.EnableRaisingEvents <- true
         fileWatcher
+
+    let disposeWatchers () =
+        for KeyValue(_, (_, watcher)) in cache do
+            watcher |> Option.iter (fun w -> w.Dispose())
+        cache.Clear()
+
+    do this.Disposing.Add(fun _ -> disposeWatchers())
 
     do try
         let templateTy = ProvidedTypeDefinition(thisAssembly, rootNamespace, "Template", None, isErased = false)
@@ -49,8 +57,9 @@ type Template (cfg: TypeProviderConfig) as this =
         templateTy.DefineStaticParameters([pathOrHtmlParam; optimizeHtmlParam], fun typename pars ->
             match pars with
             | [| :? string as pathOrHtml; :? bool as optimizeHtml |] ->
+                let cacheKey = $"{pathOrHtml}|{optimizeHtml}"
                 let ty, _ =
-                    cache.GetOrAdd(pathOrHtml, fun key ->
+                    cache.GetOrAdd(cacheKey, fun key ->
                         let asm = ProvidedAssembly()
                         let ty = ProvidedTypeDefinition(asm, rootNamespace, typename, Some typeof<TemplateNode>,
                                     isErased = false,
