@@ -52,7 +52,7 @@ type Template (cfg: TypeProviderConfig) as this =
         let templateTy = ProvidedTypeDefinition(thisAssembly, rootNamespace, "Template", None, isErased = false)
         let pathOrHtmlParam = ProvidedStaticParameter("pathOrHtml", typeof<string>)
         pathOrHtmlParam.AddXmlDoc("The path to an HTML file, or an HTML string directly.")
-        let optimizeHtmlParam = ProvidedStaticParameter("optimizePlainHtml", typeof<bool>, false)
+        let optimizeHtmlParam = ProvidedStaticParameter("optimizePlainHtml", typeof<bool>, true)
         optimizeHtmlParam.AddXmlDoc("Optimize the rendering of HTML segments that don't contain any holes.")
         templateTy.DefineStaticParameters([pathOrHtmlParam; optimizeHtmlParam], fun typename pars ->
             match pars with
