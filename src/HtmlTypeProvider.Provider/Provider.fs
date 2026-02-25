@@ -57,7 +57,7 @@ type Template (cfg: TypeProviderConfig) as this =
         templateTy.DefineStaticParameters([pathOrHtmlParam; optimizeHtmlParam], fun typename pars ->
             match pars with
             | [| :? string as pathOrHtml; :? bool as optimizeHtml |] ->
-                let cacheKey = $"{pathOrHtml}|{optimizeHtml}"
+                let cacheKey = $"{typename}|{pathOrHtml}|{optimizeHtml}"
                 let ty, _ =
                     cache.GetOrAdd(cacheKey, fun key ->
                         let asm = ProvidedAssembly()

@@ -48,7 +48,7 @@ let html =
         .Title("My Site")
         .BodyClass("container")
         .Content(
-            Node.Concat [|
+            Node.Fragment [|
                 Page.Card().CardTitle("Card 1").CardBody("Hello").Elt()
                 Page.Card().CardTitle("Card 2").CardBody("World").Elt()
             |])
@@ -85,7 +85,7 @@ Node.Empty()                            // No output
 Node.Text "safe text"                   // HTML-encoded text
 Node.RawHtml "<b>raw</b>"              // Unencoded passthrough
 Node.Elt "div" [| attrs |] [| kids |]  // Element with attrs and children
-Node.Concat [| node1; node2 |]         // Join nodes
+Node.Fragment [| node1; node2 |]         // Sibling nodes without wrapper
 Node.Render node                        // Node -> string
 ```
 
@@ -114,7 +114,7 @@ let card = Page.Card().CardTitle("Hi").Elt()
 ```fsharp
 type T = HtmlTypeProvider.Template<
     pathOrHtml: string,           // File path or inline HTML string
-    optimizePlainHtml: bool       // Default: false. Collapse hole-free HTML segments
+    optimizePlainHtml: bool       // Default: true. Collapse hole-free HTML segments
 >
 ```
 

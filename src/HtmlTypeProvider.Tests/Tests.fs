@@ -65,13 +65,13 @@ let runtimeTests = testList "Runtime" [
         let result = Node.Render node
         Expect.equal result "<BR>" ""
 
-    testCase "Node.Concat joins multiple nodes" <| fun () ->
-        let node = Node.Concat [| Node.Text "a"; Node.Text "b" |]
+    testCase "Node.Fragment joins multiple nodes" <| fun () ->
+        let node = Node.Fragment [| Node.Text "a"; Node.Text "b" |]
         let result = Node.Render node
         Expect.equal result "ab" ""
 
-    testCase "Node.Concat with empty sequence" <| fun () ->
-        let result = Node.Render(Node.Concat [||])
+    testCase "Node.Fragment with empty sequence" <| fun () ->
+        let result = Node.Render(Node.Fragment [||])
         Expect.equal result "" ""
 
     testCase "Attr.Empty produces nothing" <| fun () ->
@@ -289,7 +289,7 @@ let nestedTests = testList "Nested" [
         Expect.stringContains result "Body1</p>" ""
 
     testCase "Nested template multiple cards" <| fun () ->
-        let cards = Node.Concat [|
+        let cards = Node.Fragment [|
             NestedFile.Card().CardTitle("A").CardBody("1").Elt()
             NestedFile.Card().CardTitle("B").CardBody("2").Elt()
         |]
@@ -312,7 +312,7 @@ let nestedTests = testList "Nested" [
         let badge = MultiNested.Badge().BadgeText("new").Elt()
         let result =
             MultiNested()
-                .Title(Node.Concat [| alert; badge |])
+                .Title(Node.Fragment [| alert; badge |])
                 .Render()
         Expect.stringContains result "alert-danger" ""
         Expect.stringContains result "Fire!" ""

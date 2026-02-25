@@ -81,7 +81,7 @@ let rec ConvertNode (vars: Map<string, Expr>) (node: Parsing.Expr) : Expr<Node> 
     match node with
     | Parsing.Concat exprs ->
         let exprs = TExpr.Array<Node> (Seq.map (ConvertNode vars) exprs)
-        <@ Node.Concat %exprs @>
+        <@ Node.Fragment %exprs @>
     | Parsing.PlainHtml string ->
         <@ Node.RawHtml string @>
     | Parsing.Elt (name, attrs, children) ->

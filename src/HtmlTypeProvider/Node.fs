@@ -45,12 +45,16 @@ module Node =
         Node(fun sb ->
             sb.Append(html) |> ignore)
 
-    /// <summary>Concatenate multiple nodes into a single Node.</summary>
-    /// <param name="nodes">The nodes to concatenate.</param>
-    let Concat (nodes: seq<Node>) =
+    /// <summary>Combine multiple nodes as siblings without a wrapper element.</summary>
+    /// <param name="nodes">The sibling nodes.</param>
+    let Fragment (nodes: seq<Node>) =
         Node(fun sb ->
             for node in nodes do
                 node.Invoke(sb))
+
+    /// <summary>Combine multiple nodes as siblings without a wrapper element.</summary>
+    [<System.Obsolete("Use Node.Fragment instead.")>]
+    let Concat (nodes: seq<Node>) = Fragment nodes
 
     /// <summary>Render a Node to a string.</summary>
     /// <param name="node">The node to render.</param>

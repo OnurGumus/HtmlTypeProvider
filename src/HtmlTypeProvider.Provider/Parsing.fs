@@ -21,6 +21,7 @@ module HoleType =
         | _ -> failwith $"Hole name used multiple times with incompatible types: {holeName}"
 
 let HoleRE = Regex(@"\${(\w+)}", RegexOptions.Compiled)
+let MalformedHoleRE = Regex(@"\${(?!\w+})", RegexOptions.Compiled)
 
 type VarSubstitution =
     {
@@ -120,6 +121,10 @@ module Parsed =
         WithVars vars (f e1 e2)
 
 let ParseText (t: string) (varType: HoleType) : Parsed =
+    let malformed = MalformedHoleRE.Matches(t) |> Seq.cast<Match> |> Seq.toList
+    if not malformed.IsEmpty then
+        let positions = malformed |> List.map (fun m -> string m.Index) |> String.concat ", "
+        failwith $"Malformed hole(s) in template at position(s) {positions}. Holes must have the format ${{Name}}."
     let parse = HoleRE.Matches(t) |> Seq.cast<Match> |> Array.ofSeq
     if Array.isEmpty parse then NoVars [PlainHtml t] else
     let parts = ResizeArray()
