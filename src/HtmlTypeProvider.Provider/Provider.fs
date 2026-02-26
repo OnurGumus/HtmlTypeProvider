@@ -3,6 +3,7 @@ namespace HtmlTypeProvider.Templating
 open System.Collections.Concurrent
 open System.IO
 open System.Reflection
+open System.Threading
 open FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
 open HtmlTypeProvider.TemplatingInternals
@@ -16,6 +17,7 @@ type Template (cfg: TypeProviderConfig) as this =
     let thisAssembly = Assembly.GetExecutingAssembly()
     let rootNamespace = "HtmlTypeProvider"
     let cache = ConcurrentDictionary<string, ProvidedTypeDefinition * FileSystemWatcher option>()
+    let debounceTimer = ref Option<Timer>.None
 
     let watchFileChanges key fileName =
         let fullPath = Path.Combine(cfg.ResolutionFolder, fileName) |> Path.Canonicalize
@@ -33,7 +35,12 @@ type Template (cfg: TypeProviderConfig) as this =
                 cache.TryRemove key |> ignore
                 fileWatcher.Dispose()
                 disposed <- true
-                this.Invalidate())
+                // Debounce: coalesce rapid file change events into a single invalidation
+                lock debounceTimer (fun _ ->
+                    debounceTimer.Value |> Option.iter (fun (t: Timer) -> t.Dispose())
+                    debounceTimer.Value <- Some (new Timer((fun _ ->
+                        lock debounceTimer (fun _ -> debounceTimer.Value <- None)
+                        this.Invalidate()), null, 300, Timeout.Infinite))))
 
         fileWatcher.Changed.Add(changeHandler)
         fileWatcher.Deleted.Add(changeHandler)
@@ -42,6 +49,9 @@ type Template (cfg: TypeProviderConfig) as this =
         fileWatcher
 
     let disposeWatchers () =
+        lock debounceTimer (fun _ ->
+            debounceTimer.Value |> Option.iter (fun (t: Timer) -> t.Dispose())
+            debounceTimer.Value <- None)
         for KeyValue(_, (_, watcher)) in cache do
             watcher |> Option.iter (fun w -> w.Dispose())
         cache.Clear()
