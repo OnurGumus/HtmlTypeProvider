@@ -1,5 +1,6 @@
 namespace HtmlTypeProvider.Templating
 
+open System
 open System.Collections.Concurrent
 open System.IO
 open System.Reflection
@@ -16,47 +17,72 @@ type Template (cfg: TypeProviderConfig) as this =
 
     let thisAssembly = Assembly.GetExecutingAssembly()
     let rootNamespace = "HtmlTypeProvider"
-    let cache = ConcurrentDictionary<string, ProvidedTypeDefinition * FileSystemWatcher option>()
+    let cache = ConcurrentDictionary<string, ProvidedTypeDefinition>()
+
+    // Polling-based file watching: deduped by physical file path
+    let watchedPaths = ConcurrentDictionary<string, DateTime>()   // fullPath -> lastWriteTimeUtc
+    let keyToPath = ConcurrentDictionary<string, string>()        // cacheKey -> fullPath
     let debounceTimer = ref Option<Timer>.None
+    let debounceTimerLock = obj()
+    let pollTimer = ref Option<Timer>.None
+    let pollTimerLock = obj()
 
-    let watchFileChanges key fileName =
+    let debounceInvalidate () =
+        lock debounceTimerLock (fun _ ->
+            debounceTimer.Value |> Option.iter (fun (t: Timer) -> t.Dispose())
+            debounceTimer.Value <- Some (new Timer((fun _ ->
+                lock debounceTimerLock (fun _ -> debounceTimer.Value <- None)
+                this.Invalidate()), null, 300, Timeout.Infinite)))
+
+    let checkFiles _ =
+        for KeyValue(fullPath, lastWrite) in watchedPaths do
+            let changed =
+                try
+                    File.GetLastWriteTimeUtc(fullPath) <> lastWrite
+                with _ -> true
+            if changed then
+                watchedPaths.TryRemove fullPath |> ignore
+                for KeyValue(key, path) in keyToPath do
+                    if path = fullPath then
+                        cache.TryRemove key |> ignore
+                        keyToPath.TryRemove key |> ignore
+                debounceInvalidate()
+        // Re-arm timer only if there are still files to watch; otherwise stop
+        lock pollTimerLock (fun _ ->
+            match pollTimer.Value with
+            | Some t when not (watchedPaths.IsEmpty) ->
+                t.Change(2000, Timeout.Infinite) |> ignore
+            | Some t ->
+                t.Dispose()
+                pollTimer.Value <- None
+            | None -> ())
+
+    let ensureTimer () =
+        lock pollTimerLock (fun _ ->
+            if pollTimer.Value.IsNone && not (watchedPaths.IsEmpty) then
+                pollTimer.Value <- Some (new Timer(checkFiles, null, 2000, Timeout.Infinite)))
+
+    let watchFile key fileName =
         let fullPath = Path.Combine(cfg.ResolutionFolder, fileName) |> Path.Canonicalize
-        let fileWatcher = new FileSystemWatcher(
-            Path = Path.GetDirectoryName(fullPath),
-            Filter = Path.GetFileName(fullPath)
-        )
+        try
+            let lastWrite = File.GetLastWriteTimeUtc(fullPath)
+            watchedPaths.[fullPath] <- lastWrite
+            keyToPath.[key] <- fullPath
+            ensureTimer()
+        with _ -> ()
 
-        let lockObj = obj()
-        let mutable disposed = false
-
-        let changeHandler = fun _ ->
-            lock lockObj (fun _ ->
-                if disposed then () else
-                cache.TryRemove key |> ignore
-                fileWatcher.Dispose()
-                disposed <- true
-                // Debounce: coalesce rapid file change events into a single invalidation
-                lock debounceTimer (fun _ ->
-                    debounceTimer.Value |> Option.iter (fun (t: Timer) -> t.Dispose())
-                    debounceTimer.Value <- Some (new Timer((fun _ ->
-                        lock debounceTimer (fun _ -> debounceTimer.Value <- None)
-                        this.Invalidate()), null, 300, Timeout.Infinite))))
-
-        fileWatcher.Changed.Add(changeHandler)
-        fileWatcher.Deleted.Add(changeHandler)
-        fileWatcher.Renamed.Add(fun e -> changeHandler e)
-        fileWatcher.EnableRaisingEvents <- true
-        fileWatcher
-
-    let disposeWatchers () =
-        lock debounceTimer (fun _ ->
+    let dispose () =
+        lock pollTimerLock (fun _ ->
+            pollTimer.Value |> Option.iter (fun t -> t.Dispose())
+            pollTimer.Value <- None)
+        lock debounceTimerLock (fun _ ->
             debounceTimer.Value |> Option.iter (fun (t: Timer) -> t.Dispose())
             debounceTimer.Value <- None)
-        for KeyValue(_, (_, watcher)) in cache do
-            watcher |> Option.iter (fun w -> w.Dispose())
+        watchedPaths.Clear()
+        keyToPath.Clear()
         cache.Clear()
 
-    do this.Disposing.Add(fun _ -> disposeWatchers())
+    do this.Disposing.Add(fun _ -> dispose())
 
     do try
         let templateTy = ProvidedTypeDefinition(thisAssembly, rootNamespace, "Template", None, isErased = false)
@@ -68,18 +94,16 @@ type Template (cfg: TypeProviderConfig) as this =
             match pars with
             | [| :? string as pathOrHtml; :? bool as optimizeHtml |] ->
                 let cacheKey = $"{typename}|{pathOrHtml}|{optimizeHtml}"
-                let ty, _ =
-                    cache.GetOrAdd(cacheKey, fun key ->
-                        let asm = ProvidedAssembly()
-                        let ty = ProvidedTypeDefinition(asm, rootNamespace, typename, Some typeof<TemplateNode>,
-                                    isErased = false,
-                                    hideObjectMethods = true)
-                        let content = Parsing.ParseFileOrContent pathOrHtml cfg.ResolutionFolder optimizeHtml
-                        CodeGen.Populate ty content
-                        asm.AddTypes([ty])
-                        let fileWatcher = content.Filename |> Option.map (watchFileChanges key)
-                        ty, fileWatcher)
-                ty
+                cache.GetOrAdd(cacheKey, fun key ->
+                    let asm = ProvidedAssembly()
+                    let ty = ProvidedTypeDefinition(asm, rootNamespace, typename, Some typeof<TemplateNode>,
+                                isErased = false,
+                                hideObjectMethods = true)
+                    let content = Parsing.ParseFileOrContent pathOrHtml cfg.ResolutionFolder optimizeHtml
+                    CodeGen.Populate ty content
+                    asm.AddTypes([ty])
+                    content.Filename |> Option.iter (watchFile key)
+                    ty)
             | x -> failwith $"Unexpected parameter values: {x}"
         )
         templateTy.AddXmlDoc("Provide content from a template HTML file.")
