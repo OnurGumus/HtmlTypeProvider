@@ -5,7 +5,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>HtmlTypeProvider</PackageId>
-    <Version>0.2.2</Version>
+    <Version>0.3.0</Version>
     <Authors>HtmlTypeProvider Contributors</Authors>
     <Description>An F# type provider that parses HTML templates with ${Hole} syntax and generates strongly-typed builder APIs producing HTML strings.</Description>
     <PackageTags>fsharp;typeprovider;html;template</PackageTags>
