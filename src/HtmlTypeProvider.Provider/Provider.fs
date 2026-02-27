@@ -22,16 +22,12 @@ type Template (cfg: TypeProviderConfig) as this =
     // Cache parsed templates separately from provided types so repeated type checks
     // can reuse parsing work without retaining unbounded provided type graphs.
     let maxParsedTemplateCacheEntries = 256
-    let maxProvidedTypeCacheEntries = 256
     let parsedTemplateCache = ConcurrentDictionary<string, Parsing.ParsedTemplates>()
     let parsedTemplateCacheOrder = ConcurrentQueue<string>()
-    let providedTypeCache = ConcurrentDictionary<string, ProvidedTypeDefinition>()
-    let providedTypeCacheOrder = ConcurrentQueue<string>()
 
     // Polling-based file watching: deduped by physical file path
     let watchedPaths = ConcurrentDictionary<string, DateTime>()     // fullPath -> lastWriteTimeUtc
     let parseKeyToPath = ConcurrentDictionary<string, string>()     // parseKey -> fullPath
-    let typeKeyToPath = ConcurrentDictionary<string, string>()      // typeKey -> fullPath
     let debounceTimer = ref Option<Timer>.None
     let debounceTimerLock = obj()
     let pollTimer = ref Option<Timer>.None
@@ -64,10 +60,6 @@ type Template (cfg: TypeProviderConfig) as this =
                     if path = fullPath then
                         parsedTemplateCache.TryRemove key |> ignore
                         parseKeyToPath.TryRemove key |> ignore
-                for KeyValue(key, path) in typeKeyToPath do
-                    if path = fullPath then
-                        providedTypeCache.TryRemove key |> ignore
-                        typeKeyToPath.TryRemove key |> ignore
                 debounceInvalidate()
         // Re-arm timer only if there are still files to watch; otherwise stop
         lock pollTimerLock (fun _ ->
@@ -100,9 +92,7 @@ type Template (cfg: TypeProviderConfig) as this =
             debounceTimer.Value <- None)
         watchedPaths.Clear()
         parseKeyToPath.Clear()
-        typeKeyToPath.Clear()
         parsedTemplateCache.Clear()
-        providedTypeCache.Clear()
 
     do this.Disposing.Add(fun _ -> dispose())
 
@@ -123,18 +113,13 @@ type Template (cfg: TypeProviderConfig) as this =
                         parsedTemplateCacheOrder.Enqueue key
                         trimCache maxParsedTemplateCacheEntries parsedTemplateCacheOrder parsedTemplateCache parseKeyToPath
                         parsed)
-                let typeKey = $"{typename}|{parseKey}"
-                providedTypeCache.GetOrAdd(typeKey, fun key ->
-                    let asm = ProvidedAssembly()
-                    let ty = ProvidedTypeDefinition(asm, rootNamespace, typename, Some typeof<TemplateNode>,
-                                isErased = false,
-                                hideObjectMethods = true)
-                    CodeGen.Populate ty content
-                    asm.AddTypes([ty])
-                    content.Filename |> Option.iter (fun fileName -> watchFile typeKeyToPath key fileName)
-                    providedTypeCacheOrder.Enqueue key
-                    trimCache maxProvidedTypeCacheEntries providedTypeCacheOrder providedTypeCache typeKeyToPath
-                    ty)
+                let asm = ProvidedAssembly()
+                let ty = ProvidedTypeDefinition(asm, rootNamespace, typename, Some typeof<TemplateNode>,
+                            isErased = false,
+                            hideObjectMethods = true)
+                CodeGen.Populate ty content
+                asm.AddTypes([ty])
+                ty
             | x -> failwith $"Unexpected parameter values: {x}"
         )
         templateTy.AddXmlDoc("Provide content from a template HTML file.")
