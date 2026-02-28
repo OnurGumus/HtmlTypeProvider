@@ -32,7 +32,11 @@ type Template (cfg: TypeProviderConfig) as this =
         | _ -> true
 
     // Polling-based file watching: deduped by physical file path
-    let watchedPaths = ConcurrentDictionary<string, DateTime>()     // fullPath -> lastWriteTimeUtc
+    let watchedPaths = ConcurrentDictionary<string, DateTime * int>()     // fullPath -> (lastWriteTimeUtc, contentHash)
+
+    let hashFileContent (fullPath: string) =
+        try File.ReadAllText(fullPath).GetHashCode()
+        with _ -> 0
     let debounceTimer = ref Option<Timer>.None
     let debounceTimerLock = obj()
     let pollTimer = ref Option<Timer>.None
@@ -54,10 +58,18 @@ type Template (cfg: TypeProviderConfig) as this =
                 this.Invalidate()), null, 300, Timeout.Infinite)))
 
     let rec checkFiles _ =
-        for KeyValue(fullPath, lastWrite) in watchedPaths do
+        for KeyValue(fullPath, (lastWrite, contentHash)) in watchedPaths do
             let changed =
                 try
-                    File.GetLastWriteTimeUtc(fullPath) <> lastWrite
+                    let newWrite = File.GetLastWriteTimeUtc(fullPath)
+                    if newWrite = lastWrite then false
+                    else
+                        let newHash = hashFileContent fullPath
+                        if newHash = contentHash then
+                            // Timestamp changed but content didn't (e.g. git rebase) — update timestamp only
+                            watchedPaths.[fullPath] <- (newWrite, contentHash)
+                            false
+                        else true
                 with _ -> true
             if changed then
                 watchedPaths.TryRemove fullPath |> ignore
@@ -87,7 +99,8 @@ type Template (cfg: TypeProviderConfig) as this =
         let fullPath = Path.Combine(resolutionFolder, fileName) |> Path.Canonicalize
         try
             let lastWrite = File.GetLastWriteTimeUtc(fullPath)
-            watchedPaths.[fullPath] <- lastWrite
+            let contentHash = hashFileContent fullPath
+            watchedPaths.[fullPath] <- (lastWrite, contentHash)
             StaticCache.parseKeyToPath.[key] <- fullPath
             ensureTimer()
         with _ -> ()
