@@ -118,6 +118,23 @@ type T = HtmlTypeProvider.Template<
 >
 ```
 
+## Troubleshooting
+
+### High CPU usage in IDE with .NET 10 / F# 10
+
+If you experience sustained high CPU from `fsautocomplete` (the F# language server) when using this provider with F# 10, it is caused by an [FCS bug](https://github.com/dotnet/fsharp/pull/19369) in the type subsumption cache where `TypeStructure.GetHashCode` performs O(n) hashing on every cache lookup.
+
+**Workaround:** Set the environment variable `FSharp_CacheEvictionImmediate=1` before launching your editor. This switches the cache eviction strategy from a background worker (which continuously rehashes) to synchronous inline eviction, eliminating the CPU spike while keeping the cache functional.
+
+On macOS (persists until reboot):
+```bash
+launchctl setenv FSharp_CacheEvictionImmediate 1
+```
+
+On Linux/Windows, set the variable in your shell profile or system environment variables.
+
+After setting it, fully restart your editor (not just reload).
+
 ## Safety
 
 - All text content holes are HTML-encoded via `System.Net.WebUtility.HtmlEncode`
