@@ -14,6 +14,7 @@
     <Compile Include="..\HtmlTypeProvider\Attr.fs" Link="Attr.fs" />
     <Compile Include="..\HtmlTypeProvider\Node.fs" Link="Node.fs" />
     <Compile Include="..\HtmlTypeProvider\TemplatingInternals.fs" Link="TemplatingInternals.fs" />
+    <Compile Include="..\HtmlTypeProvider\TemplateRuntime.fs" Link="TemplateRuntime.fs" />
     <Compile Include="Utilities.fs" />
     <Compile Include="Path.fs" />
     <Compile Include="Parsing.fs" />

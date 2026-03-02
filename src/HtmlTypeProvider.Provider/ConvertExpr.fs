@@ -77,6 +77,20 @@ let rec ConvertAttr (vars: Map<string, Expr>) (attr: Parsing.Expr) : Expr<Attr> 
     | Parsing.PlainHtml _ | Parsing.Elt _ ->
         failwith $"Invalid attribute: {attr}"
 
+let rec ConvertRawText (vars: Map<string, Expr>) (text: Parsing.Expr) : Expr<string> =
+    match text with
+    | Parsing.Concat texts ->
+        let texts = TExpr.Array<string>(Seq.map (ConvertRawText vars) texts)
+        <@ String.Concat %texts @>
+    | Parsing.PlainHtml text ->
+        <@ text @>
+    | Parsing.VarContent varName ->
+        vars[varName] |> Expr.Cast
+    | Parsing.WrapVars (subst, text) ->
+        WrapAndConvert vars subst ConvertRawText text
+    | Parsing.Attr _ | Parsing.Elt _ ->
+        failwith $"Unexpected expression in raw text: {text}"
+
 let rec ConvertNode (vars: Map<string, Expr>) (node: Parsing.Expr) : Expr<Node> =
     match node with
     | Parsing.Concat exprs ->

@@ -3,3 +3,6 @@ obj/
 *.user
 *.suo
 .vs/
+nupkg/
+.claude/profiling/
+.claude/settings.local.json

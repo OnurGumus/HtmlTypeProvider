@@ -122,13 +122,17 @@ type Template (cfg: TypeProviderConfig) as this =
         pathOrHtmlParam.AddXmlDoc("The path to an HTML file, or an HTML string directly.")
         let optimizeHtmlParam = ProvidedStaticParameter("optimizePlainHtml", typeof<bool>, true)
         optimizeHtmlParam.AddXmlDoc("Optimize the rendering of HTML segments that don't contain any holes.")
-        templateTy.DefineStaticParameters([pathOrHtmlParam; optimizeHtmlParam], fun typename pars ->
+        let rawTextParam = ProvidedStaticParameter("rawText", typeof<bool>, false)
+        rawTextParam.AddXmlDoc("If true, read the file as raw text without HTML parsing or encoding.")
+        templateTy.DefineStaticParameters([pathOrHtmlParam; optimizeHtmlParam; rawTextParam], fun typename pars ->
             match pars with
-            | [| :? string as pathOrHtml; :? bool as optimizeHtml |] ->
-                let parseKey = $"{resolutionFolder}|{pathOrHtml}|{optimizeHtml}"
+            | [| :? string as pathOrHtml; :? bool as optimizeHtml; :? bool as rawText |] ->
+                let parseKey = $"{resolutionFolder}|{pathOrHtml}|{optimizeHtml}|{rawText}"
                 let content =
                     StaticCache.parsedTemplateCache.GetOrAdd(parseKey, fun key ->
-                        let parsed = Parsing.ParseFileOrContent pathOrHtml resolutionFolder optimizeHtml
+                        let parsed =
+                            if rawText then Parsing.ParseRawText pathOrHtml resolutionFolder
+                            else Parsing.ParseFileOrContent pathOrHtml resolutionFolder optimizeHtml
                         if enableWatch then
                             parsed.Filename |> Option.iter (fun fileName -> watchFile key fileName)
                         StaticCache.parsedTemplateCacheOrder.Enqueue key
@@ -146,7 +150,7 @@ type Template (cfg: TypeProviderConfig) as this =
                     ty)
             | x -> failwith $"Unexpected parameter values: {x}"
         )
-        templateTy.AddXmlDoc("Provide content from a template HTML file.")
+        templateTy.AddXmlDoc("Provide content from a template HTML file or raw text file.")
         this.AddNamespace(rootNamespace, [templateTy])
         with exn ->
             failwith $"{exn}"

@@ -5,7 +5,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>HtmlTypeProvider</PackageId>
-    <Version>0.6.1</Version>
+    <Version>0.8.0</Version>
     <Authors>HtmlTypeProvider Contributors</Authors>
     <Description>An F# type provider that parses HTML templates with ${Hole} syntax and generates strongly-typed builder APIs producing HTML strings.</Description>
     <PackageTags>fsharp;typeprovider;html;template</PackageTags>
@@ -20,6 +20,7 @@
     <Compile Include="Attr.fs" />
     <Compile Include="Node.fs" />
     <Compile Include="TemplatingInternals.fs" />
+    <Compile Include="TemplateRuntime.fs" />
   </ItemGroup>
   <!-- Pack the design-time provider assembly and its dependencies into the nupkg.
        Only include the provider DLL and HtmlAgilityPack; FSharp.Core is already

@@ -24,6 +24,11 @@ type AttrHoleFile = HtmlTypeProvider.Template<"templates/attr-hole.html">
 type NestedFile = HtmlTypeProvider.Template<"templates/nested.html">
 type MultiNested = HtmlTypeProvider.Template<"templates/multi-nested.html">
 
+// rawText templates
+type RawGreeting = HtmlTypeProvider.Template<"templates/greeting.txt", rawText=true>
+type RawNoHoles = HtmlTypeProvider.Template<"templates/no-holes.txt", rawText=true>
+type RawInline = HtmlTypeProvider.Template<"You are a ${Role} at ${Company}.", rawText=true>
+
 // ============================================================
 // Runtime unit tests
 // ============================================================
@@ -329,12 +334,86 @@ let nestedTests = testList "Nested" [
         Expect.stringContains result "5</span>" ""
 ]
 
+// ============================================================
+// rawText and runtime override tests
+// ============================================================
+
+let rawTextTests = testList "RawText" [
+    testCase "rawText file template with holes" <| fun () ->
+        let result = RawGreeting().Name("Alice").Place("Wonderland").Render()
+        Expect.equal result "Hello Alice, welcome to Wonderland!" ""
+
+    testCase "rawText file template Elt wraps in RawHtml" <| fun () ->
+        let node = RawGreeting().Name("Bob").Place("NYC").Elt()
+        let result = Node.Render node
+        Expect.equal result "Hello Bob, welcome to NYC!" ""
+
+    testCase "rawText with no holes renders static content" <| fun () ->
+        let result = RawNoHoles().Render()
+        Expect.equal result "This is a static prompt with no holes." ""
+
+    testCase "rawText inline template with holes" <| fun () ->
+        let result = RawInline().Role("Engineer").Company("Acme").Render()
+        Expect.equal result "You are a Engineer at Acme." ""
+
+    testCase "rawText setting hole twice uses last value" <| fun () ->
+        let result = RawGreeting().Name("first").Name("second").Place("X").Render()
+        Expect.equal result "Hello second, welcome to X!" ""
+
+    testCase "rawText Render can be called multiple times" <| fun () ->
+        let tpl = RawGreeting().Name("A").Place("B")
+        let r1 = tpl.Render()
+        let r2 = tpl.Render()
+        Expect.equal r1 r2 ""
+
+    // --- Runtime override tests ---
+
+    testCase "Runtime override renders with new template" <| fun () ->
+        let overrideTemplate = "Greetings ${Name}! You are in ${Place}."
+        let result = RawGreeting(overrideTemplate).Name("Alice").Place("Wonderland").Render()
+        Expect.equal result "Greetings Alice! You are in Wonderland." ""
+
+    testCase "Runtime override preserves typed API" <| fun () ->
+        let overrideTemplate = "${Place}: ${Name} arrived."
+        let result = RawGreeting(overrideTemplate).Name("Bob").Place("NYC").Render()
+        Expect.equal result "NYC: Bob arrived." ""
+
+    testCase "Runtime override Elt also uses override" <| fun () ->
+        let overrideTemplate = "${Name}@${Place}"
+        let node = RawGreeting(overrideTemplate).Name("a").Place("b").Elt()
+        let result = Node.Render node
+        Expect.equal result "a@b" ""
+
+    testCase "Runtime override with missing hole throws" <| fun () ->
+        Expect.throwsT<System.ArgumentException> (fun () ->
+            RawGreeting("Only ${Name} here.") |> ignore
+        ) "Should throw when holes don't match"
+
+    testCase "Runtime override with extra hole throws" <| fun () ->
+        Expect.throwsT<System.ArgumentException> (fun () ->
+            RawGreeting("${Name} ${Place} ${Extra}") |> ignore
+        ) "Should throw when extra holes present"
+
+    testCase "Runtime override with no holes on holed template throws" <| fun () ->
+        Expect.throwsT<System.ArgumentException> (fun () ->
+            RawGreeting("No holes at all") |> ignore
+        ) "Should throw when no holes in override"
+
+    testCase "Default ctor uses compile-time template" <| fun () ->
+        let result = RawGreeting().Name("X").Place("Y").Render()
+        Expect.equal result "Hello X, welcome to Y!" ""
+        // Verify it's the file content, not some default
+        Expect.stringContains result "Hello" ""
+        Expect.stringContains result "welcome to" ""
+]
+
 [<Tests>]
 let allTests = testList "All" [
     runtimeTests
     inlineTests
     fileBasedTests
     nestedTests
+    rawTextTests
 ]
 
 [<EntryPoint>]

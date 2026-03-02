@@ -1,0 +1,22 @@
+<html>
+<head><title>${Title}</title></head>
+<body>
+  <header><nav>${NavContent}</nav></header>
+  <main class="${MainClass}">
+    <h1>${Heading}</h1>
+    <div class="${ContentClass}">${Content}</div>
+    <aside>${Sidebar}</aside>
+  </main>
+  <template id="Card">
+    <div class="card">
+      <h2>${CardTitle}</h2>
+      <p>${CardBody}</p>
+      <span class="${CardClass}">${CardFooter}</span>
+    </div>
+  </template>
+  <template id="ListItem">
+    <li class="${ItemClass}">${ItemText}</li>
+  </template>
+  <footer>${FooterContent}</footer>
+</body>
+</html>

@@ -187,6 +187,7 @@ type ParsedTemplates =
         Filename: option<string>
         Main: Parsed
         Nested: Map<string, Parsed>
+        IsRawText: bool
     }
 
 let ParseDoc (optimizeHtml: bool) (filename: option<string>) (doc: HtmlDocument) : ParsedTemplates =
@@ -210,7 +211,7 @@ let ParseDoc (optimizeHtml: bool) (filename: option<string>) (doc: HtmlDocument)
         )
         |> Map.ofSeq
     let main = ParseOneTemplate optimizeHtml doc.DocumentNode.ChildNodes
-    { Filename = filename; Main = main; Nested = nested }
+    { Filename = filename; Main = main; Nested = nested; IsRawText = false }
 
 let GetDoc (fileOrContent: string) (rootFolder: string) : option<string> * HtmlDocument =
     let doc = HtmlDocument()
@@ -228,3 +229,14 @@ let GetDoc (fileOrContent: string) (rootFolder: string) : option<string> * HtmlD
 let ParseFileOrContent (fileOrContent: string) (rootFolder: string) (optimizeHtml: bool) : ParsedTemplates =
     GetDoc fileOrContent rootFolder
     ||> ParseDoc optimizeHtml
+
+let ParseRawText (fileOrContent: string) (rootFolder: string) : ParsedTemplates =
+    let rootFolder = Path.Canonicalize rootFolder
+    let fullPath = System.IO.Path.Combine(rootFolder, fileOrContent) |> Path.Canonicalize
+    let content, filename =
+        if File.Exists(fullPath) then
+            File.ReadAllText(fullPath), Some (Path.GetRelativePath rootFolder fullPath)
+        else
+            fileOrContent, None
+    let parsed = ParseText content HoleType.String
+    { Filename = filename; Main = parsed; Nested = Map.empty; IsRawText = true }

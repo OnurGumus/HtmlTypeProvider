@@ -102,11 +102,78 @@ let PopulateOne (ty: ProvidedTypeDefinition) (content: Parsing.Parsed) =
         yield MakeRenderMethod content :> MemberInfo
     ]
 
+// --- rawText-specific codegen ---
+
+let MakeCtorRawText (holes: Parsing.Vars) (holeNames: string[]) =
+    ProvidedConstructor([], fun args ->
+        let this = getThis args
+        let holesExpr = TExpr.Array<obj> [
+            for KeyValue(_, _) in holes -> <@ box "" @>
+        ]
+        let holeNamesArr =
+            Expr.NewArray(typeof<string>, [ for n in holeNames -> Expr.Value(n) ])
+        <@@ (%this).Holes <- %holesExpr
+            (%this).HoleNames <- (%%holeNamesArr : string[]) @@>)
+
+let MakeCtorWithOverride (holes: Parsing.Vars) (holeNames: string[]) =
+    let param = ProvidedParameter("runtimeTemplate", typeof<string>)
+    ProvidedConstructor([param], fun args ->
+        let this = getThis args
+        let runtimeTemplate : Expr<string> = args[1] |> Expr.Cast
+        let holesExpr = TExpr.Array<obj> [
+            for KeyValue(_, _) in holes -> <@ box "" @>
+        ]
+        let holeNamesArr =
+            Expr.NewArray(typeof<string>, [ for n in holeNames -> Expr.Value(n) ])
+        <@@ (%this).Holes <- %holesExpr
+            TemplateRuntime.InitWithOverride %this (%%holeNamesArr : string[]) %runtimeTemplate @@>)
+
+let private rawTextBody (content: Parsed) (args: Expr list) : Expr =
+    let this = getThis args
+    let vars = content.Vars |> Map.map (fun k v -> Var(k, TypeOf v))
+    let varExprs = vars |> Map.map (fun _ v -> Expr.Var v)
+    let compiledExpr = ConvertRawText varExprs (Concat content.Expr)
+    let compiledBody =
+        ((0, (compiledExpr :> Expr)), vars)
+        ||> Seq.fold (fun (i, e) (KeyValue(_, var)) ->
+            let value = <@@ (%this).Holes[i] @@>
+            let value = Expr.Coerce(value, var.Type)
+            i + 1, Expr.Let(var, value, e)
+        )
+        |> snd
+    <@@ if isNull (%this).RuntimeTemplate then
+            (%%compiledBody : string)
+        else
+            TemplateRuntime.RenderRawText (%this).RuntimeTemplate (%this).HoleNames (%this).Holes @@>
+
+let MakeRenderMethodRawText (content: Parsed) =
+    ProvidedMethod("Render", [], typeof<string>, fun args -> rawTextBody content args)
+
+let MakeFinalMethodRawText (content: Parsed) =
+    ProvidedMethod("Elt", [], typeof<Node>, fun args ->
+        let body = rawTextBody content args
+        <@@ Node.RawHtml (%%body : string) @@>)
+
+let PopulateOneRawText (ty: ProvidedTypeDefinition) (content: Parsing.Parsed) =
+    let holeNames = content.Vars |> Seq.map (fun kv -> kv.Key) |> Seq.toArray
+    ty.AddMembers [
+        yield MakeCtorRawText content.Vars holeNames :> MemberInfo
+        yield MakeCtorWithOverride content.Vars holeNames :> MemberInfo
+        yield! content.Vars |> Seq.mapi (fun i (KeyValue(name, type')) ->
+            MakeHoleMethods name type' i ty
+        ) |> Seq.concat
+        yield MakeFinalMethodRawText content :> MemberInfo
+        yield MakeRenderMethodRawText content :> MemberInfo
+    ]
+
 let Populate (mainTy: ProvidedTypeDefinition) (content: ParsedTemplates) =
-    PopulateOne mainTy content.Main
-    for KeyValue(name, content) in content.Nested do
-        let ty = ProvidedTypeDefinition(name, Some typeof<TemplateNode>,
-                    isErased = false,
-                    hideObjectMethods = true)
-        mainTy.AddMember ty
-        PopulateOne ty content
+    if content.IsRawText then
+        PopulateOneRawText mainTy content.Main
+    else
+        PopulateOne mainTy content.Main
+        for KeyValue(name, content) in content.Nested do
+            let ty = ProvidedTypeDefinition(name, Some typeof<TemplateNode>,
+                        isErased = false,
+                        hideObjectMethods = true)
+            mainTy.AddMember ty
+            PopulateOne ty content

@@ -3,5 +3,6 @@
     <Project Path="src/HtmlTypeProvider.Provider/HtmlTypeProvider.Provider.fsproj" />
     <Project Path="src/HtmlTypeProvider.Tests/HtmlTypeProvider.Tests.fsproj" />
     <Project Path="src/HtmlTypeProvider/HtmlTypeProvider.fsproj" />
+    <Project Path="src/StressTest/StressTest.fsproj" />
   </Folder>
 </Solution>
