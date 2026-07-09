@@ -68,6 +68,36 @@ Holes are detected by their position in the template:
 
 The same hole name can appear multiple times — types are merged automatically.
 
+## Escaping `$` (JavaScript, shell scripts, etc.)
+
+To output a literal `${...}` — for example a JavaScript template literal inside a `<script>` tag — escape the dollar by doubling it: `$${` renders as `${` and is not treated as a hole.
+
+```html
+<script>
+  const greeting = `Hello $${user.name}, you have $${count} messages`;
+</script>
+```
+
+renders as:
+
+```html
+<script>
+  const greeting = `Hello ${user.name}, you have ${count} messages`;
+</script>
+```
+
+The rules, applied left to right:
+
+| Template | Output | Notes |
+|----------|--------|-------|
+| `${Name}` | hole value | A hole, as usual |
+| `$${Name}` | `${Name}` | Escaped — literal text, no hole |
+| `$$${Name}` | `$` + hole value | Literal `$` followed by a real hole |
+| `$${any text}` | `${any text}` | Escape also silences the malformed-hole error |
+| `$$` (not before `{`) | `$$` | Dollars away from `{` never need escaping |
+
+In short: in a run of dollars immediately preceding `{`, each `$$` pair collapses to one literal `$`; if one `$` remains, it starts a hole. Escaping works everywhere holes do: text content, attribute values, `rawText` templates, and runtime template overrides.
+
 ## API Reference
 
 ### Builder Methods

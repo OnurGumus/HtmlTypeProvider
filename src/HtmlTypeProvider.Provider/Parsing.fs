@@ -20,8 +20,22 @@ module HoleType =
         | (String | Html | AttributeValue), (String | Html | AttributeValue) -> String
         | _ -> failwith $"Hole name used multiple times with incompatible types: {holeName}"
 
-let HoleRE = Regex(@"\${(\w+)}", RegexOptions.Compiled)
-let MalformedHoleRE = Regex(@"\${(?!\w+})", RegexOptions.Compiled)
+// Template text is tokenized left-to-right:
+//   - `$$` in a run of dollars ending at `{` collapses to a literal `$`,
+//     so `$${name}` outputs literal `${name}` (e.g. JS template literals)
+//     and `$$${Name}` outputs a literal `$` followed by the Name hole.
+//     `$$` anywhere else (not before a `{`) is left untouched.
+//   - `${Word}` is a hole.
+//   - any other `${` is malformed.
+// Keep in sync with the runtime copy in HtmlTypeProvider/TemplateRuntime.fs.
+let TokenRE = Regex(@"\$\$(?=\$*\{)|\$\{(\w+)\}|\$\{", RegexOptions.Compiled)
+
+let private isEscape (m: Match) = m.Value = "$$"
+let private isHole (m: Match) = m.Groups[1].Success
+
+/// Collapse `$$` escapes in text that bypasses ParseText (e.g. OuterHtml).
+let UnescapeDollars (s: string) : string =
+    TokenRE.Replace(s, fun m -> if isEscape m then "$" else m.Value)
 
 type VarSubstitution =
     {
@@ -121,26 +135,36 @@ module Parsed =
         WithVars vars (f e1 e2)
 
 let ParseText (t: string) (varType: HoleType) : Parsed =
-    let malformed = MalformedHoleRE.Matches(t) |> Seq.cast<Match> |> Seq.toList
-    if not malformed.IsEmpty then
-        let positions = malformed |> List.map (fun m -> string m.Index) |> String.concat ", "
-        failwith $"Malformed hole(s) in template at position(s) {positions}. Holes must have the format ${{Name}}."
-    let parse = HoleRE.Matches(t) |> Seq.cast<Match> |> Array.ofSeq
+    let parse = TokenRE.Matches(t) |> Seq.cast<Match> |> Array.ofSeq
     if Array.isEmpty parse then NoVars [PlainHtml t] else
+    let malformed = parse |> Array.filter (fun m -> not (isEscape m || isHole m))
+    if not (Array.isEmpty malformed) then
+        let positions = malformed |> Seq.map (fun m -> string m.Index) |> String.concat ", "
+        failwith $"Malformed hole(s) in template at position(s) {positions}. Holes must have the format ${{Name}}. To output a literal ${{ escape the dollar as $${{ (e.g. $${{name}} renders as ${{name}})."
     let parts = ResizeArray()
-    let mutable lastHoleEnd = 0
+    let text = StringBuilder()
+    let pushText () =
+        if text.Length > 0 then
+            parts.Add(PlainHtml (text.ToString()))
+            text.Clear() |> ignore
+    let mutable lastEnd = 0
     let mutable vars = Map.empty
     for p in parse do
-        if p.Index > lastHoleEnd then
-            parts.Add(PlainHtml t[lastHoleEnd..p.Index - 1])
-        let varName = p.Groups[1].Value
-        if not (Map.containsKey varName vars) then
-            vars <- Map.add varName varType vars
-        parts.Add(VarContent varName)
-        lastHoleEnd <- p.Index + p.Length
-    if lastHoleEnd < t.Length then
-        parts.Add(PlainHtml t[lastHoleEnd..t.Length - 1])
-    WithVars vars (parts.ToArray() |> List.ofSeq)
+        if p.Index > lastEnd then
+            text.Append(t, lastEnd, p.Index - lastEnd) |> ignore
+        if isEscape p then
+            text.Append('$') |> ignore
+        else
+            let varName = p.Groups[1].Value
+            if not (Map.containsKey varName vars) then
+                vars <- Map.add varName varType vars
+            pushText()
+            parts.Add(VarContent varName)
+        lastEnd <- p.Index + p.Length
+    if lastEnd < t.Length then
+        text.Append(t, lastEnd, t.Length - lastEnd) |> ignore
+    pushText()
+    WithVars vars (List.ofSeq parts)
 
 let ParseAttribute (ownerNode: HtmlNode) (attr: HtmlAttribute) : Parsed =
     let name = attr.Name
@@ -167,7 +191,7 @@ let rec ParseNode (optimizeHtml: bool) (node: HtmlNode) : Parsed =
             |> Seq.map (ParseNode optimizeHtml)
             |> Parsed.Concat
         if optimizeHtml && not (HasVars attrs || HasVars children) then
-            NoVars [PlainHtml node.OuterHtml]
+            NoVars [PlainHtml (UnescapeDollars node.OuterHtml)]
         else
             (attrs, children)
             ||> Parsed.Map2 (fun attrs children ->

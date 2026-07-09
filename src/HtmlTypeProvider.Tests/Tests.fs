@@ -29,6 +29,15 @@ type RawGreeting = HtmlTypeProvider.Template<"templates/greeting.txt", rawText=t
 type RawNoHoles = HtmlTypeProvider.Template<"templates/no-holes.txt", rawText=true>
 type RawInline = HtmlTypeProvider.Template<"You are a ${Role} at ${Company}.", rawText=true>
 
+// $$ escaping
+type InlineEscapedHole = HtmlTypeProvider.Template<"<div>$${Content}</div>">
+type InlineJsTemplate = HtmlTypeProvider.Template<"<div><script>const m = `Hi $${name}, $${user.name}`;</script><p>${Msg}</p></div>">
+type InlineDollarThenHole = HtmlTypeProvider.Template<"<span>$$${Amount}</span>">
+type InlineEscapedAttr = HtmlTypeProvider.Template<"""<div data-tpl="$${x}">text</div>""">
+type InlinePlainDollars = HtmlTypeProvider.Template<"<p>cost: $$ or $$(sel) or $x</p>">
+type InlineOptimizedEscape = HtmlTypeProvider.Template<"<script>const a = `$${x}`;</script>", optimizePlainHtml=true>
+type RawEscape = HtmlTypeProvider.Template<"Literal $${X} and real ${Y}.", rawText=true>
+
 // ============================================================
 // Runtime unit tests
 // ============================================================
@@ -407,6 +416,53 @@ let rawTextTests = testList "RawText" [
         Expect.stringContains result "welcome to" ""
 ]
 
+// ============================================================
+// $$ escaping tests
+// ============================================================
+
+let escapeTests = testList "Escaping" [
+    testCase "Escaped hole renders literally and creates no hole" <| fun () ->
+        let result = InlineEscapedHole().Render()
+        Expect.equal result "<div>${Content}</div>" ""
+
+    testCase "JS template literals survive via $$ escape" <| fun () ->
+        let result = InlineJsTemplate().Msg("hi").Render()
+        Expect.stringContains result "const m = `Hi ${name}, ${user.name}`;" ""
+        Expect.stringContains result "<p>hi</p>" ""
+
+    testCase "Literal dollar before a real hole ($$$)" <| fun () ->
+        let result = InlineDollarThenHole().Amount("5").Render()
+        Expect.equal result "<span>$5</span>" ""
+
+    testCase "Escape works in attribute values" <| fun () ->
+        let result = InlineEscapedAttr().Render()
+        Expect.equal result """<div data-tpl="${x}">text</div>""" ""
+
+    testCase "Dollars not before a brace are untouched" <| fun () ->
+        let result = InlinePlainDollars().Render()
+        Expect.equal result "<p>cost: $$ or $$(sel) or $x</p>" ""
+
+    testCase "Escape is unescaped in optimized plain HTML" <| fun () ->
+        let result = InlineOptimizedEscape().Render()
+        Expect.stringContains result "const a = `${x}`;" ""
+
+    testCase "rawText escape renders literal hole, real hole still works" <| fun () ->
+        let result = RawEscape().Y("value").Render()
+        Expect.equal result "Literal ${X} and real value." ""
+
+    testCase "Runtime override with escaped hole" <| fun () ->
+        let result = RawGreeting("$${literal} ${Name} at ${Place}").Name("A").Place("B").Render()
+        Expect.equal result "${literal} A at B" ""
+
+    testCase "ExtractHoleNames skips escaped holes" <| fun () ->
+        let holes = TemplateRuntime.ExtractHoleNames "$${a} ${b} $$${c}"
+        Expect.equal holes [| "b"; "c" |] ""
+
+    testCase "RenderRawText collapses escapes" <| fun () ->
+        let result = TemplateRuntime.RenderRawText "$${x} ${A} $$$ $" [| "A" |] [| box "v" |]
+        Expect.equal result "${x} v $$$ $" ""
+]
+
 [<Tests>]
 let allTests = testList "All" [
     runtimeTests
@@ -414,6 +470,7 @@ let allTests = testList "All" [
     fileBasedTests
     nestedTests
     rawTextTests
+    escapeTests
 ]
 
 [<EntryPoint>]

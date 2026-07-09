@@ -3,16 +3,23 @@ module HtmlTypeProvider.TemplateRuntime
 open System.Text.RegularExpressions
 open HtmlTypeProvider.TemplatingInternals
 
-let private holeRE = Regex(@"\${(\w+)}", RegexOptions.Compiled)
+// `${Word}` is a hole; `$$` in a run of dollars ending at `{` is an escape
+// that collapses to a literal `$` (so `$${name}` renders as literal `${name}`).
+// Keep in sync with the compile-time tokenizer in HtmlTypeProvider.Provider/Parsing.fs.
+let private tokenRE = Regex(@"\$\$(?=\$*\{)|\$\{(\w+)\}", RegexOptions.Compiled)
+
+let private isEscape (m: Match) = m.Value = "$$"
 
 /// Extract unique hole names from a template string, in order of first occurrence.
+/// Escaped holes ($${name}) are not counted.
 let ExtractHoleNames (template: string) : string[] =
     let seen = System.Collections.Generic.HashSet<string>()
     let result = ResizeArray<string>()
-    for m in holeRE.Matches(template) |> Seq.cast<Match> do
-        let name = m.Groups.[1].Value
-        if seen.Add(name) then
-            result.Add(name)
+    for m in tokenRE.Matches(template) |> Seq.cast<Match> do
+        if not (isEscape m) then
+            let name = m.Groups.[1].Value
+            if seen.Add(name) then
+                result.Add(name)
     result.ToArray()
 
 /// Validate that the runtime template has exactly the same holes as the compile-time template.
@@ -42,12 +49,14 @@ let InitWithOverride (node: TemplateNode) (holeNames: string[]) (runtimeTemplate
     node.HoleNames <- holeNames
     node.RuntimeTemplate <- runtimeTemplate
 
-/// Render a rawText template by substituting ${Hole} placeholders with hole values.
+/// Render a rawText template by substituting ${Hole} placeholders with hole values
+/// and collapsing $$ escapes to a literal $.
 let RenderRawText (template: string) (holeNames: string[]) (holes: obj[]) : string =
     let holeMap = System.Collections.Generic.Dictionary<string, int>()
     for i = 0 to holeNames.Length - 1 do
         holeMap.[holeNames.[i]] <- i
-    holeRE.Replace(template, MatchEvaluator(fun m ->
+    tokenRE.Replace(template, MatchEvaluator(fun m ->
+        if isEscape m then "$" else
         let name = m.Groups.[1].Value
         match holeMap.TryGetValue(name) with
         | true, idx -> string holes.[idx]
