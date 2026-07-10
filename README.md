@@ -139,12 +139,57 @@ type Page = HtmlTypeProvider.Template<"page.html">
 let card = Page.Card().CardTitle("Hi").Elt()
 ```
 
+## Raw Text Templates
+
+With `rawText=true` the template is treated as plain text instead of HTML: no HTML parsing, no encoding of hole values, no nested `<template>` support. This is useful for LLM prompts, emails, config files, or any non-HTML text with `${Hole}` placeholders:
+
+`templates/greeting.txt`:
+
+```text
+Hello ${Name}, welcome to ${Place}!
+```
+
+```fsharp
+type Greeting = HtmlTypeProvider.Template<"templates/greeting.txt", rawText=true>
+
+let text = Greeting().Name("Alice").Place("Wonderland").Render()
+// "Hello Alice, welcome to Wonderland!"
+```
+
+Inline raw text works too — a string that doesn't resolve to an existing file is used as the template itself:
+
+```fsharp
+type Prompt = HtmlTypeProvider.Template<"You are a ${Role} at ${Company}.", rawText=true>
+```
+
+Note: raw text hole values are substituted verbatim (not HTML-encoded). `.Elt()` wraps the result in `Node.RawHtml`, so only compose it into HTML if the content is trusted.
+
+## Runtime Template Overrides
+
+Raw text templates get a second constructor that accepts a replacement template **at runtime**, while keeping the compile-time typed API. This lets you load edited templates from a database or config without recompiling:
+
+```fsharp
+type Greeting = HtmlTypeProvider.Template<"templates/greeting.txt", rawText=true>
+
+// Compile-time template
+Greeting().Name("A").Place("B").Render()
+// "Hello A, welcome to B!"
+
+// Runtime override — same holes, different text
+let fromDb = "Greetings ${Name}! You are in ${Place}."
+Greeting(fromDb).Name("A").Place("B").Render()
+// "Greetings A! You are in B."
+```
+
+The override is validated on construction: it must contain **exactly the same holes** as the compile-time template — no missing holes, no extras — otherwise the constructor throws `ArgumentException` listing the mismatch. Escaped holes (`$${...}`) in the override render literally and don't count toward validation.
+
 ## Parameters
 
 ```fsharp
 type T = HtmlTypeProvider.Template<
-    pathOrHtml: string,           // File path or inline HTML string
-    optimizePlainHtml: bool       // Default: true. Collapse hole-free HTML segments
+    pathOrHtml: string,           // File path or inline template string
+    optimizePlainHtml: bool,      // Default: true. Collapse hole-free HTML segments
+    rawText: bool                 // Default: false. Treat template as plain text (no HTML parsing/encoding)
 >
 ```
 
