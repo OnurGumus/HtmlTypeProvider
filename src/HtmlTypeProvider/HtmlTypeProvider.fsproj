@@ -5,7 +5,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>HtmlTypeProvider</PackageId>
-    <Version>0.9.0</Version>
+    <Version>0.9.1</Version>
     <Authors>HtmlTypeProvider Contributors</Authors>
     <Description>An F# type provider that parses HTML templates with ${Hole} syntax and generates strongly-typed builder APIs producing HTML strings.</Description>
     <PackageTags>fsharp;typeprovider;html;template</PackageTags>
@@ -22,6 +22,22 @@
     <Compile Include="TemplatingInternals.fs" />
     <Compile Include="TemplateRuntime.fs" />
   </ItemGroup>
+  <!-- Ordering, and nothing else. The designer project builds straight into this
+       project's obj/$(Configuration)/typeproviders folder through its own OutputPath, so
+       there is nothing to copy; what was missing is that building or packing this
+       project did not build that one. The staged DLL was therefore whatever the last
+       person to build the designer had left there, and a pack could ship a designer
+       months older than the source beside it, silently. That is how a fix to the
+       designer went out with no effect at all.
+
+       ReferenceOutputAssembly is false because the runtime assembly must not reference
+       the designer, and PrivateAssets keeps it out of the package's dependencies. -->
+  <ItemGroup>
+    <ProjectReference Include="..\HtmlTypeProvider.Provider\HtmlTypeProvider.Provider.fsproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
   <!-- Pack the design-time provider assembly and its dependencies into the nupkg.
        Only include the provider DLL and HtmlAgilityPack; FSharp.Core is already
        available to the compiler host so we exclude it and its satellite assemblies. -->

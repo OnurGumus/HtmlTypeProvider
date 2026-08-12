@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <OutputType>Library</OutputType>
     <OutputPath>..\HtmlTypeProvider\obj\$(Configuration)\typeproviders\fsharp41\netstandard2.0</OutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -24,5 +25,13 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.11.*" />
+    <!-- Pinned low, and deliberately. A designer assembly is loaded into whatever host
+         is type checking: the compiler, but also an IDE's language service, which ships
+         its own FSharp.Core and is usually behind. Built against the SDK's implicit
+         FSharp.Core (10.1.0.0 on a .NET 11 preview) it loads in the compiler and fails
+         everywhere else with FileNotFoundException, so the provided types simply vanish
+         in the editor while the build stays green. The loader resolves a lower version
+         to the host's, so this works in both. -->
+    <PackageReference Include="FSharp.Core" Version="8.0.400" />
   </ItemGroup>
 </Project>
